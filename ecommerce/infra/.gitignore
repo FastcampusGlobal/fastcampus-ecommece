@@ -1,0 +1,9 @@
+.terraform
+load-balancer/.terraform
+helm-release/.terraform
+terraform.tfstate
+terraform.tfstate.backup
+load-balancer/terraform.tfstate
+load-balancer/terraform.tfstate.backup
+helm-release/terraform.tfstate
+helm-release/terraform.tfstate.backup
