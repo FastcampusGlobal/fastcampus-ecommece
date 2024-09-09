@@ -7,6 +7,7 @@ import com.fc.ecommerce.model.User;
 import com.fc.ecommerce.repository.ProductRepository;
 import com.fc.ecommerce.repository.StoreRepository;
 import com.fc.ecommerce.repository.UserRepository;
+import com.fc.ecommerce.service.CloudWatchService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +19,9 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1")
 public class ProductController {
@@ -34,6 +37,9 @@ public class ProductController {
 
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
+
+    @Autowired
+    private CloudWatchService cloudWatchService;
 
     // Get all products for a user's store
     @GetMapping("/users/{userId}/store/products")
@@ -113,6 +119,8 @@ public class ProductController {
 
     @GetMapping("/products/search")
     public ResponseEntity<?> searchProductsByName(@RequestParam String name, @RequestParam Long userId) {
+        long startTime = System.currentTimeMillis();
+
         // Rate limiting logic
         String key = "search_rate_limit:" + userId;
         ValueOperations<String, String> ops = redisTemplate.opsForValue();
@@ -122,12 +130,23 @@ public class ProductController {
             redisTemplate.expire(key, 1, TimeUnit.MINUTES);
         }
         
-        if (count > 5) {
+        if (count > 5000) {
             return ResponseEntity.status(429).body("Rate limit exceeded. Try again later.");
         }
 
         // Existing search logic
         List<Product> products = productRepository.findByNameUsingTrigram(name);
+
+        long executionTime = System.currentTimeMillis() - startTime;
+        
+        // Asynchronously record the performance metric
+        cloudWatchService.recordControllerPerformance("ProductController", "searchProductsByName", executionTime)
+            .thenRun(() -> log.debug("Performance metric recorded successfully"))
+            .exceptionally(ex -> {
+                log.error("Failed to record performance metric", ex);
+                return null;
+            });
+
         return ResponseEntity.ok(products);
     }
 }
